@@ -11,12 +11,12 @@ from httpx import Client, AsyncClient
 from utils import find_key
 from dotenv import load_dotenv
 from constants import GQL_FEATURES
+from config import Config
 
 load_dotenv()
 
-proxy = os.getenv("PROXY")
 auth_token = os.getenv("AUTH_TOKEN")
-
+proxy = Config.proxies
 
 def generate_ct0() -> str:
     # Seed the random number generator
@@ -55,8 +55,8 @@ def get_headers(auth_token:str) -> dict:
 
 def get_client() -> AsyncClient:
     headers = get_headers(auth_token)
-    # client = httpx.AsyncClient(headers=headers, proxy=proxy)
-    client = httpx.AsyncClient(headers=headers)
+    client = httpx.AsyncClient(headers=headers, proxy=proxy[0], follow_redirects=True)
+    # client = httpx.AsyncClient(headers=headers)
     return client
 
 

@@ -3,6 +3,7 @@ import time
 import hashlib
 import json
 from httpx import Headers
+from config import Config
 
 def find_key(obj: any, key: str) -> list:
     """
@@ -76,3 +77,22 @@ def extract_ct0_from_headers(header: Headers) -> dict:
         if "ct0=" in cookie:
             cookie = cookie.split(";")
             return cookie[0].strip()
+
+def get_client_headers(auth_token:str) -> dict:
+    headers = {}
+    ct0 = generate_ct0()
+
+    headers["authorization"] = Config.BEARER_TOKEN
+    headers["referer"] = Config.REFERER
+    headers["user-agent"] = Config.USER_AGENT
+
+    headers["x-twitter-auth-type"] = ""
+    headers["x-twitter-active-user"] = "yes"
+    headers["x-twitter-client-language"] = "en"
+    headers["x-twitter-auth-type"] = "OAuth2Session"
+    headers["content-type"] = "application/json"
+    
+    headers["x-csrf-token"] = ct0
+    headers["cookie"] = "auth_token={}; ct0={}".format(auth_token, ct0)
+
+    return headers

@@ -1,6 +1,7 @@
 import sqlite3
 import os
 from typing import List, Dict
+from utils import format_cookies, generate_ct0
 
 class AccountDatabaseManager:
     def __init__(self, db_name: str = "accounts.db"):
@@ -81,8 +82,8 @@ class AccountDatabaseManager:
             for account in accounts:
                 cursor.execute(
                     """
-                    INSERT INTO accounts (username, password, email, email_password, auth_token) 
-                    VALUES (?, ?, ?, ?, ?)
+                    INSERT INTO accounts (username, password, email, email_password, auth_token, cookies) 
+                    VALUES (?, ?, ?, ?, ?, ?)
                     """,
                     (
                         account["username"],
@@ -90,6 +91,7 @@ class AccountDatabaseManager:
                         account["email"],
                         account["email_password"],
                         account["auth_token"],
+                        format_cookies(account["auth_token"], generate_ct0())
                     )
                 )
             connection.commit()

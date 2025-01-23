@@ -4,6 +4,24 @@ import hashlib
 import json
 from httpx import Headers
 from config import Config
+from typing import Any, Callable, TypeVar
+from collections import defaultdict
+from datetime import datetime, timezone
+
+T = TypeVar("T")
+
+class utc:
+    @staticmethod
+    def now() -> datetime:
+        return datetime.now(timezone.utc)
+
+    @staticmethod
+    def from_iso(iso: str) -> datetime:
+        return datetime.fromisoformat(iso).replace(tzinfo=timezone.utc)
+
+    @staticmethod
+    def ts() -> int:
+        return int(utc.now().timestamp())
 
 def find_key(obj: any, key: str) -> list:
     """
@@ -37,6 +55,24 @@ def find_key(obj: any, key: str) -> list:
         return L
 
     return helper(obj, key, [])
+
+def find_obj(obj: dict, fn: Callable[[dict], bool]) -> Any | None:
+    if not isinstance(obj, dict):
+        return None
+
+    if fn(obj):
+        return obj
+
+    for _, v in obj.items():
+        if isinstance(v, dict):
+            if res := find_obj(v, fn):
+                return res
+        elif isinstance(v, list):
+            for x in v:
+                if res := find_obj(x, fn):
+                    return res
+
+    return None
 
 def generate_ct0() -> str:
     # Seed the random number generator
@@ -96,3 +132,61 @@ def get_client_headers(auth_token:str) -> dict:
     headers["cookie"] = "auth_token={}; ct0={}".format(auth_token, ct0)
 
     return headers
+
+def get_or(obj: dict, key: str, default_value: T = None) -> Any | T:
+    for part in key.split("."):
+        if part not in obj:
+            return default_value
+        obj = obj[part]
+    return obj
+
+def int_or(obj: dict, key: str, default_value: int | None = None):
+    try:
+        val = get_or(obj, key)
+        return int(val) if val is not None else default_value
+    except Exception:
+        return default_value
+    
+def find_item(lst: list[T], fn: Callable[[T], bool]) -> T | None:
+    for item in lst:
+        if fn(item):
+            return item
+    return None
+
+def get_typed_object(obj: dict, res: defaultdict[str, list]):
+    obj_type = obj.get("__typename", None)
+    if obj_type is not None:
+        res[obj_type].append(obj)
+
+    for _, v in obj.items():
+        if isinstance(v, dict):
+            get_typed_object(v, res)
+        elif isinstance(v, list):
+            for x in v:
+                if isinstance(x, dict):
+                    get_typed_object(x, res)
+
+    return res
+
+def to_old_obj(obj: dict):
+    return {
+        **obj,
+        **obj["legacy"],
+        "id_str": str(obj["rest_id"]),
+        "id": int(obj["rest_id"]),
+        "legacy": None,
+    }
+
+def to_old_rep(obj: dict) -> dict[str, dict]:
+    tmp = get_typed_object(obj, defaultdict(list))
+
+    tw1 = [x for x in tmp.get("Tweet", []) if "legacy" in x]
+    tw1 = {str(x["rest_id"]): to_old_obj(x) for x in tw1}
+
+    tw2 = [x["tweet"] for x in tmp.get("TweetWithVisibilityResults", []) if "legacy" in x["tweet"]]
+    tw2 = {str(x["rest_id"]): to_old_obj(x) for x in tw2}
+
+    users = [x for x in tmp.get("User", []) if "legacy" in x and "id" in x]
+    users = {str(x["rest_id"]): to_old_obj(x) for x in users}
+
+    return {"tweets": {**tw1, **tw2}, "users": users}

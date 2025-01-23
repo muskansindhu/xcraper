@@ -1,13 +1,13 @@
 import os
 import re
 import asyncio
-from typing import Any, Dict, List, Tuple, Union
+from typing import Any, Dict, List, Tuple
 from httpx import AsyncClient, Headers
 import time
 import json
 from dotenv import load_dotenv
 
-from utils import find_key, encode_params, find_obj
+from utils import encode_params, find_obj
 from constants import GQL_FEATURES
 from config import Config
 from account import Account
@@ -98,22 +98,12 @@ class Xcraper:
         if response is None:
             return {}, [], None, {}
 
-        # Parse response
         data = response.json()
-        entries = [
-            entry for entry_list in find_key(data, "entries")
-            for entry in entry_list
-            if re.search(r"^(tweet|user)-", entry["entryId"])
-        ]
-
-        # Add query to each entry
-        for entry in entries:
-            entry["query"] = variables["rawQuery"]
 
         next_cursor = self._get_cursor(data, cursor_type)
         response_headers = self._get_response_headers(response.headers)
 
-        return data, entries, next_cursor, response_headers
+        return data, next_cursor, response_headers
 
     async def search(
         self,
@@ -133,21 +123,16 @@ class Xcraper:
             Tuple[Dict[str, Any], List[Dict[str, Any]], str, Dict[str, str]]: The response data, entries, cursor, and response headers.
         """
         features = {**GQL_FEATURES}
-        cur, cnt, active = None, 0, True
+        cur, active = None, True
 
         while active:
             await asyncio.sleep(3)
-            data, entries, next_cursor, response_headers = await self.fetch_search_page(
+            data, next_cursor, response_headers = await self.fetch_search_page(
                 client, query, cur, features, cursor_type
             )
 
-            if not entries:
-                break
+            yield parse_tweets(data), next_cursor, response_headers
 
-            yield parse_tweets(data), entries, next_cursor, response_headers
-
-            # Update variables for pagination
-            cnt += len(entries)
             if not self._check_rate_limit(response_headers):
                 active = False
             # elif not next_cursor:
@@ -158,15 +143,14 @@ class Xcraper:
 async def main():
     xcraper = Xcraper()
 
-    account = Account()
-    account.auth_token = auth_token
+    account = Account(auth_token)
     client = account.make_client()
 
     query = "elon musk"
 
     try:
         tweets = []
-        async for data, entries, cursor, response_headers in xcraper.search(client, query):
+        async for data, cursor, response_headers in xcraper.search(client, query):
             print(response_headers)
 
             if not xcraper._check_rate_limit(response_headers):

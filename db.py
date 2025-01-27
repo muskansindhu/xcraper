@@ -31,7 +31,7 @@ class AccountDatabaseManager:
                    auth_token TEXT NOT NULL, 
                    cookies TEXT, 
                    stats TEXT, 
-                   locks TEXT, 
+                   next_reset INTEGER DEFAULT 0, 
                    active BOOLEAN, 
                    error TEXT
                )''')
@@ -100,8 +100,47 @@ class AccountDatabaseManager:
         finally:
             connection.close()
 
+    def fetch_account_by_rowid(self, rowid):
+        connection = sqlite3.connect('accounts.db')
+        cursor = connection.cursor()
+        
+        query = "SELECT * FROM accounts WHERE rowid = ?"
+        
+        cursor.execute(query, (rowid,))
+        
+        account = cursor.fetchone()
+        
+        connection.close()
+        return account
+    
+    def get_accounts(self, thread_id, batch_size):
+        conn = sqlite3.connect("accounts.db")
+        cursor = conn.cursor()
+
+        cursor.execute("SELECT username, auth_token, next_reset FROM accounts LIMIT ?, ?", (thread_id * batch_size, batch_size))
+
+        accounts = cursor.fetchall()
+
+        conn.close()
+        return accounts
+    
+    def fetch_backup_account(self):
+        conn = sqlite3.connect("backup_accounts.db")
+        cursor = conn.cursor()
+
+        cursor.execute("SELECT username FROM accounts WHERE active = 1 LIMIT 1")
+        account = cursor.fetchone()
+
+        if account:
+            cursor.execute("UPDATE accounts SET active = 0 WHERE username = ?", (account[0],))
+
+        conn.commit()
+        conn.close()
+        return account
+
 
 if __name__ == "__main__":
     db = AccountDatabaseManager()
+    # print(db.fetch_account_by_rowid(1))
     db.insert_account_details("account_creds.txt")
 
